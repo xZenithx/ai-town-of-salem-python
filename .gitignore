@@ -1,0 +1,7 @@
+.vscode/
+venv/
+__pycache__/
+*.pyc
+prompts/
+response/
+game_history.txt
