@@ -2,7 +2,7 @@
 from ast import List
 from enum import Enum
 from game.llm_agent import LLMAgent
-from game.parser import PlayerResponse
+from game.parser import GameAction, PlayerResponse
 from game.roles.base import Role, RoleAlignment
 from game.personality import pick_random_personality
 from game.phase import Phase
@@ -121,8 +121,16 @@ class Player:
 
         prompt += f"\n{self.role.day_prompt}\n" if self._game.is_day() else f"{self.role.night_prompt}\n\n"
 
+        # Add actions available
+        prompt += "Available actions:\n"
+        actions: List[GameAction] = self._game.parser.get_phase_actions_for_role(self.role, self._game.phase)
+
+        for action in actions:
+            if action.phase == Phase.DAY and self._game.is_day():
+                prompt += f"- {action.name}, Usage: {action.tag}\n"
+
         # turn the history into a single string prompt
-        prompt += "Full day log:\n"
+        prompt += "\nFull day log:\n"
         if self.day_history:
             prompt += "\n".join(f"{msg}" for msg in self.day_history) + "\n\n"
         else:
@@ -171,7 +179,13 @@ class Player:
         if not self.llm_agent:
             raise ValueError("LLM Agent is not initialized for this player.")
         
-        prompt = ""
+        prompt = "You are not allowed to speak during the night phase.\n"
+
+        prompt += "NIGHT PHASE RULES:\n"
+        prompt += "- You may perform your role's action.\n"
+        prompt += "- You may NOT vote.\n"
+        prompt += "- You may NOT speak.\n"
+        prompt += "- You may NOT target dead players.\n"
 
         # Add night prompt
         prompt += self.role.night_prompt + "\n\n"
@@ -192,7 +206,7 @@ class Player:
         if actions and len(actions) > 0:
             for action in actions:
                 if action.phase == Phase.NIGHT:
-                    prompt += f"- {action.name}, Usage: {action.usage}\n"
+                    prompt += f"- {action.name}, Usage: {action.tag}\n"
 
         else:
             prompt += "No actions available.\n"

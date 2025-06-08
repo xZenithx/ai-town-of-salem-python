@@ -35,6 +35,7 @@ class Game:
 
         self.roles_count: Dict[str, int] = {}
         for role in roles:
+            role._game = self
             role.setup_actions()
             # Count roles
             if role.name in self.roles_count:
@@ -45,7 +46,7 @@ class Game:
         self.roles_string: str = ", ".join(f"{count}x {role}" for role, count in self.roles_count.items())
 
         self.roles = roles.copy()  # Keep a copy of the original roles for reference
-        self.unassigned_roles: List[Role] = self.roles
+        self.unassigned_roles: List[Role] = self.roles.copy()
         # Shuffle unassigned roles to randomize player roles
         random.shuffle(self.unassigned_roles)
 
@@ -115,6 +116,7 @@ class Game:
             player.add_to_history(message)
 
     async def simulate_chat(self) -> None:
+        """Simulate a chat round where each player can speak."""
         # Get a random ordered list of alive players
         players = random.sample(self.alive_players, len(self.alive_players))
 
@@ -185,6 +187,7 @@ class Game:
                 f.write(entry + "\n")
 
     async def voting_phase(self) -> None:
+        self.phase = Phase.VOTE
         # Simulate the voting phase where players vote to lynch someone
         await self.get_votes()
 
@@ -233,20 +236,24 @@ class Game:
         for player in self.alive_players:
             for action in player.role.actions:
                 if action.phase == Phase.NIGHT:
-                    print(f"{player.name} has action: {action.name} with priority {action.priority}")
                     # Add the action to the list
                     actions.append((player, action))
         
         # Execute actions in order of priority
-        actions.sort(key=lambda x: x[1].priority)
+        actions.sort(key=lambda x: x[1]._priority)
 
         has_gone: List[Player] = []
         for player, _ in actions:
             if player in has_gone:
                 continue
-
-            await player.night()
             has_gone.append(player)
+
+            response: PlayerResponse = await player.night()
+
+            response = self.parser.parse(response)
+            for action in response.actions:
+                if action.phase == Phase.NIGHT:
+                    action.invoke(player, self, response)
 
     def player_attack(self, attacker: Player, target: Player) -> None:
         """
@@ -265,15 +272,16 @@ class Game:
         if attacker_power == AttackingPower.NONE:
             raise ValueError(f"{attacker.name} has no attacking power and cannot attack.")
         
-        if target_power > attacker_power:
+        # Convert Enum to int for comparison
+        if target_power.value[0] > attacker_power.value[0]:
             attacker.add_to_history(f"Attack on {target.name} was blocked.")
             target.add_to_history(f"You were attacked but your defense blocked it.")
             self.add_to_history(f"{attacker.name}'s attack on {target.name} was blocked by {target.role.name}'s defense.")
             return
         
         # Check if the target is protected by a Doctor
-        doctors = [p for p in self.alive_players if isinstance(p.role, Doctor)]
-        if any(doctor.is_protecting(target) for doctor in doctors):
+        doctors = [p for p in self.alive_players if p.role.name == "Doctor"]
+        if any(doctor.role.is_protecting(target) for doctor in doctors):
             attacker.add_to_history(f"Attack on {target.name} was blocked.")
             target.add_to_history(f"You were attacked but a Doctor saved you.")
             self.add_to_history(f"{attacker.name}'s attack on {target.name} was blocked by a Doctor's protection.")
@@ -289,8 +297,12 @@ class Game:
 
     def on_player_killed(self, player: Player) -> None:
         player.set_alive(False)
-        self.alive_players.remove(player)
-        self.dead_players.append(player)
+
+        if player in self.alive_players:
+            self.alive_players.remove(player)
+
+        if player not in self.dead_players:
+            self.dead_players.append(player)
 
     def is_game_over(self) -> bool:
         # Check if all Mafia members are dead
@@ -320,7 +332,7 @@ class Game:
                 f.write(entry + "\n")
 
 
-def parse_speak_action(player: Player, game: Game, content: str, response: PlayerResponse) -> PlayerResponse:
+def parse_speak_action(player: Player, game: Game, content: str, response: PlayerResponse) -> None:
     """
     Parse the <SPEAK> action from the player's response.
     This function is called when a player speaks during the day phase.
@@ -329,8 +341,6 @@ def parse_speak_action(player: Player, game: Game, content: str, response: Playe
     # Content is the text inside <SPEAK> tags
     game.add_to_all_history(f"{player.name}: {content}")
     game.add_to_history(f"{player.name}: {content}")
-    
-    return response
 
 def parse_vote_action(player: Player, game: Game, content: str, response: PlayerResponse) -> None:
     """

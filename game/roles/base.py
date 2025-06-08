@@ -53,6 +53,8 @@ class Role(ABC):
         self.player: 'Player' = None
         self.actions: list['GameAction'] = []
 
+        self._game: 'Game' = None
+
     def setup_actions(self) -> None:
         """Setup the actions for the role. Override in subclasses."""
         pass
@@ -61,7 +63,7 @@ class Role(ABC):
         """Set the player associated with this role."""
         self.player = player
 
-    def on_lynched(self, game: 'Game') -> None:
+    def on_lynched(self) -> None:
         """Called when the player is lynched."""
         pass
 
@@ -72,28 +74,11 @@ class Role(ABC):
     def add_action(self, action: 'GameAction') -> None:
         """Add an action to the role."""
         self.actions.append(action)
+        self._game.parser.regiser_role_action(action, self)
 
-    def attack(self, game: 'Game', player: 'Player', target: 'Player') -> None:
+    def attack(self, player: 'Player', target: 'Player') -> None:
         """Perform an attack action on the target player."""
-        attack_power: AttackingPower = self.attacking_power
-        if attack_power == AttackingPower.NONE:
-            return
+        if self.attacking_power == AttackingPower.NONE:
+            raise ValueError("This role cannot attack.")
         
-        # Get all doctors
-        doctors = [p for p in game.alive_players if isinstance(p.role, Doctor)]
-        # Check if any doctor is protecting the target
-        if any(doctor.is_protecting(target) for doctor in doctors):
-            player.add_to_history(f"Attack on {target.name} was blocked by a Doctor's protection.")
-            game.add_to_history(f"{player.name}'s attack on {target.name} was blocked by a Doctor's protection.")
-            return
-
-        defense_power: DefensivePower = target.role.defensive_power
-        if defense_power > attack_power:
-            player.add_to_history(f"Attack on {target.name} was blocked by {target.role.name}'s defense.")
-            game.add_to_history(f"{player.name}'s attack on {target.name} was blocked by {target.role.name}'s defense.")
-            return
-
-        player.add_to_history(f"Attacked {target.name}.")
-        game.add_to_history(f"{player.name} attacked {target.name} with {attack_power.name} power.")
-        target.add_to_history(f"Attacked by {player.name} with {attack_power.name} power.")
-        game.on_player_killed(target)
+        self._game.player_attack(player, target)

@@ -34,7 +34,7 @@ class Doctor(Role):
         """
         Perform the heal action on the target player.
         """
-        target = game.get_player_by_name(content)
+        target = game.name_to_player(content)
         if not target:
             player.add_to_history("Invalid heal target.")
             game.add_to_history(f"{player.name} attempted to heal an invalid target: {content}.")

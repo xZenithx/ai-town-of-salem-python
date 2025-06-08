@@ -4,10 +4,6 @@ from .base import AttackingPower, DefensivePower, Role, RoleAlignment
 from game.parser import GameAction, PlayerResponse
 from game.engine import Game, Phase
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from game.roles.godfather import Godfather
-
 class Mafioso(Role):
     def __init__(self) -> None:
         super().__init__()
@@ -37,11 +33,11 @@ class Mafioso(Role):
         
         # If a Godfather exists, dont bother with the Mafioso
         for _player in game.alive_players:
-            if isinstance(_player.role, Godfather):
+            if _player.role.name == "Godfather":
                 return
             
         # If no Godfather, proceed with the Mafioso's kill action
-        target = game.get_player_by_name(content)
+        target = game.name_to_player(content)
         if not target:
             player.add_to_history("Invalid kill target.")
             game.add_to_history(f"{player.name} attempted to kill an invalid target: {content}.")
@@ -56,6 +52,6 @@ class Mafioso(Role):
         """
         Setup the actions for the Mafioso role.
         """
-        self.kill_action = GameAction("KILL", "<KILL>NAME</KILL>", Phase.NIGHT, self.parse_kill_action)
+        self.kill_action = GameAction("VOTEKILL", "<VOTEKILL>NAME</VOTEKILL>", Phase.NIGHT, self.parse_kill_action)
         self.kill_action.set_priority(99)
         self.add_action(self.kill_action)

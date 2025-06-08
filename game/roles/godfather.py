@@ -1,6 +1,5 @@
 # Godfather role
 from .base import AttackingPower, DefensivePower, Role, RoleAlignment
-from .mafioso import Mafioso
 from game.parser import GameAction, PlayerResponse
 from game.player import Player
 from game.engine import Game
@@ -31,7 +30,7 @@ class Godfather(Role):
         """
         Perform the kill action on the target player.
         """
-        target = game.get_player_by_name(content)
+        target = game.name_to_player(content)
         if not target:
             player.add_to_history("Invalid kill target.")
             game.add_to_history(f"{player.name} attempted to kill an invalid target: {content}.")
@@ -41,10 +40,11 @@ class Godfather(Role):
 
         # If a mafioso exists, they will carry out the kill
         for _player in game.alive_players:
-            if isinstance(_player.role, Mafioso):
+            if _player.role.name == "Mafioso":
                 attacker = _player
                 break
 
+        game.add_to_history(f"Godfather {player.name} is attacking {target.name}.")
         # Perform the attack
         game.player_attack(attacker, target)
 

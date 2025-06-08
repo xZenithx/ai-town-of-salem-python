@@ -1,9 +1,9 @@
 # Sheriff role
+from game.parser import GameAction, PlayerResponse
+from game.phase import Phase
 from .base import AttackingPower, DefensivePower, Role, RoleAlignment
 from game.player import Player
-from game.llm_agent import LLMAgent
 from game.engine import Game
-import random
 
 class Sheriff(Role):
     def __init__(self) -> None:
@@ -23,22 +23,32 @@ class Sheriff(Role):
         )
         self.night_prompt = (
             "It is the night phase. Secretly choose a player to investigate.\n"
-            "Select a player to investigate with <INVESTIGATE:NAME>.\n"
         )
 
-    def day_action(self, game: Game, player: Player, llm_agent: LLMAgent = None) -> str:
-        if llm_agent:
-            return player.choose_target(game, llm_agent)
+    def parse_interrogate_action(self, player: Player, game: 'Game', content: str, response: PlayerResponse) -> None:
+        """
+        Perform the interrogation action on the target player.
+        """
+        target = game.name_to_player(content)
+        if not target:
+            player.add_to_history("Invalid interrogation target.")
+            game.add_to_history(f"{player.name} attempted to interrogate an invalid target: {content}.")
+            return
+        
+        # Check if the target is suspicious (Mafia)
+        is_suspicious = target.role.alignment == RoleAlignment.MAFIA and target.role.name != "Godfather"
+        
+        if is_suspicious:
+            player.add_to_history(f"{target.name} is suspicious (Mafia).")
+            game.add_to_history(f"{player.name} interrogated {target.name} and found them suspicious.")
         else:
-            options = [p.name for p in game.alive_players if p.name != player.name]
-            return random.choice(options) if options else None
+            player.add_to_history(f"{target.name} is not suspicious (Innocent or Godfather).")
+            game.add_to_history(f"{player.name} interrogated {target.name} and found them not suspicious.")
 
-    def night_action(self, game: Game, player: Player, llm_agent: LLMAgent = None) -> str:
-        if llm_agent:
-            return player.choose_target(game, llm_agent)
-        else:
-            options = [p.name for p in game.alive_players if p.name != player.name]
-            return random.choice(options) if options else None
-
-    def perform_action(self, game: Game, player: Player) -> None:
-        pass
+    def setup_actions(self):
+        """
+        Setup the actions for the Sheriff role.
+        """
+        self.interrogate_action = GameAction("INTERROGATE", "<INTERROGATE>NAME</INTERROGATE>", Phase.NIGHT, self.parse_interrogate_action)
+        self.interrogate_action.set_priority(10)
+        self.add_action(self.interrogate_action)
