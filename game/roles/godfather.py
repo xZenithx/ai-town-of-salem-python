@@ -1,10 +1,10 @@
 # Godfather role
-from .base import AttackingPower, DefensivePower, Role, RoleAlignment, _GameAction
+from .base import AttackingPower, DefensivePower, Role, RoleAlignment
+from .mafioso import Mafioso
+from game.parser import GameAction, PlayerResponse
 from game.player import Player
-from game.llm_agent import LLMAgent
 from game.engine import Game
 from game.phase import Phase
-import random
 
 class Godfather(Role):
     def __init__(self) -> None:
@@ -27,21 +27,31 @@ class Godfather(Role):
             "It is the night phase. Secretly choose a town member to eliminate. You have the final say on the Mafia's target."
         )
 
-        self.add_action(_GameAction("KILL", "<KILL>NAME</KILL>", Phase.NIGHT, 100))
+    def parse_kill_action(self, player: Player, game: 'Game', content: str, response: PlayerResponse) -> None:
+        """
+        Perform the kill action on the target player.
+        """
+        target = game.get_player_by_name(content)
+        if not target:
+            player.add_to_history("Invalid kill target.")
+            game.add_to_history(f"{player.name} attempted to kill an invalid target: {content}.")
+            return
+        
+        attacker: Player = player
 
-    def day_action(self, game: Game, player: Player, llm_agent: LLMAgent = None) -> str:
-        if llm_agent:
-            return player.choose_target(game, llm_agent)
-        else:
-            options = [p.name for p in game.alive_players if p.name != player.name]
-            return random.choice(options) if options else None
+        # If a mafioso exists, they will carry out the kill
+        for _player in game.alive_players:
+            if isinstance(_player.role, Mafioso):
+                attacker = _player
+                break
 
-    def night_action(self, game: Game, player: Player, llm_agent: LLMAgent = None) -> str:
-        if llm_agent:
-            return player.choose_target(game, llm_agent)
-        else:
-            options = [p.name for p in game.alive_players if p.name != player.name and getattr(p.role, 'alignment', None) != 'mafia']
-            return random.choice(options) if options else None
+        # Perform the attack
+        game.player_attack(attacker, target)
 
-    def perform_action(self, game: Game, player: Player) -> None:
-        pass
+    def setup_actions(self):
+        """
+        Setup the actions for the Godfather role.
+        """
+        self.kill_action = GameAction("KILL", "<KILL>NAME</KILL>", Phase.NIGHT, self.parse_kill_action)
+        self.kill_action.set_priority(100)
+        self.add_action(self.kill_action)

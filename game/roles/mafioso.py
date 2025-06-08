@@ -1,7 +1,12 @@
 # Mafioso role (formerly Mafia)
 from game.player import Player
-from .base import AttackingPower, DefensivePower, Role, _GameAction, RoleAlignment
+from .base import AttackingPower, DefensivePower, Role, RoleAlignment
+from game.parser import GameAction, PlayerResponse
 from game.engine import Game, Phase
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from game.roles.godfather import Godfather
 
 class Mafioso(Role):
     def __init__(self) -> None:
@@ -25,20 +30,32 @@ class Mafioso(Role):
             "If there is no Godfather, you choose the target."
         )
 
-        self.add_action(_GameAction("KILL", "<KILL>NAME</KILL>", Phase.NIGHT, 99))
-
-    def kill_action(self, game: Game, player: Player, target: Player) -> None:
+    def parse_kill_action(self, player: Player, game: 'Game', content: str, response: PlayerResponse) -> None:
         """
         Perform the kill action on the target player.
         """
-        player.add_to_history(f"Voted to kill {target.name} at night.")
-        game.add_to_history(f"{player.name} voted to kill {target.name} at night.")
-
-        # See if the Godfather is alive
-        godfather = next((p for p in game.alive_players if p.role.name == "Godfather"), None)
-        if godfather:
-            godfather.add_to_history(f"{player.name} voted to kill {target.name}.")
+        
+        # If a Godfather exists, dont bother with the Mafioso
+        for _player in game.alive_players:
+            if isinstance(_player.role, Godfather):
+                return
+            
+        # If no Godfather, proceed with the Mafioso's kill action
+        target = game.get_player_by_name(content)
+        if not target:
+            player.add_to_history("Invalid kill target.")
+            game.add_to_history(f"{player.name} attempted to kill an invalid target: {content}.")
             return
         
-        # If no Godfather, Mafioso can kill
-        self.attack(game, player, target)
+        attacker: Player = player
+
+        # Perform the attack
+        game.player_attack(attacker, target)
+
+    def setup_actions(self):
+        """
+        Setup the actions for the Mafioso role.
+        """
+        self.kill_action = GameAction("KILL", "<KILL>NAME</KILL>", Phase.NIGHT, self.parse_kill_action)
+        self.kill_action.set_priority(99)
+        self.add_action(self.kill_action)

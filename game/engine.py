@@ -35,7 +35,7 @@ class Game:
 
         self.roles_count: Dict[str, int] = {}
         for role in roles:
-            role.setup_actions(self.parser)
+            role.setup_actions()
             # Count roles
             if role.name in self.roles_count:
                 self.roles_count[role.name] += 1
