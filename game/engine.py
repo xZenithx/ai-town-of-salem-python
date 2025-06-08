@@ -128,7 +128,6 @@ class Game:
             for action in message.actions:
                 action.invoke(player, self, message)
 
-
     def name_to_player(self, name: str) -> Player | None:
         """Find a player by their name."""
         for player in self.players:
@@ -197,26 +196,26 @@ class Game:
         # Collect votes from all alive players
         for player in self.alive_players:
             response: PlayerResponse = await player.vote()
-            self.parser.parse(response)
+            response = self.parser.parse(response)
 
             for action in response.actions:
-                if action.tag == "<VOTE>":
+                if action.name == "VOTE":
                     action.invoke(player, self, response)
         
+        max_votes: int = 0
+        voted_out: Player | None = None
         # Determine the player with the most votes
         if self.votes:
             max_votes = max(self.votes.values())
-            voted_out = [name for name, count in self.votes.items() if count == max_votes]
-        else:
-            max_votes = 0
-            voted_out = []
+            voted_out_name = [p for p, v in self.votes.items() if v == max_votes][0]
+            voted_out = self.name_to_player(voted_out_name) if voted_out_name else None
 
-        if len(voted_out) == 1:
-            self.add_to_all_history(f"{voted_out[0].name} has been lynched!")
-            self.add_to_history(f"{voted_out[0].name} has been lynched!")
+        if voted_out:
+            self.add_to_all_history(f"{voted_out.name} has been lynched!")
+            self.add_to_history(f"{voted_out.name} has been lynched!")
 
             # Find the player who was voted out
-            voted_out_player = voted_out[0]
+            voted_out_player = voted_out
             self.add_to_all_history(f"{voted_out_player.name} was a {voted_out_player.role.name}.")
             self.add_to_history(f"{voted_out_player.name} was a {voted_out_player.role.name}.")
             self.on_player_killed(voted_out_player)
